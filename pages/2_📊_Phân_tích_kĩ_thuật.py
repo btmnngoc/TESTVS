@@ -20,7 +20,8 @@ def load_and_process_data():
         # Tính biến động giá
         df['Daily_Change'] = df['Price Change']
         df['Daily_Change_Pct'] = df['Price Change %']
-        df['Cumulative_Change'] = df['Daily_Change'].cumsum()
+       # Thay đổi cách tính cumulative change để đồng bộ với giá đóng cửa
+        df['Cumulative_Change'] = df['Closing Price'] - df['Closing Price'].iloc[0]
         df['Cumulative_Change_Pct'] = (1 + df['Daily_Change_Pct']/100).cumprod() - 1
         
         # Chỉ báo kỹ thuật
