@@ -47,17 +47,20 @@ def clean_data(df):
 
 import pandas as pd
 
+import pandas as pd
+
 def load_stock_data(file_path):
     """Tải và tiền xử lý dữ liệu cổ phiếu"""
     df = pd.read_csv(file_path)
     
-    # Tiền xử lý
+    # Tiền xử lý cơ bản
     df['Date'] = pd.to_datetime(df['Date'], format="%d/%m/%Y")
     
+    # Chuyển đổi các cột số
     numeric_cols = [
         "Total Volume", "Total Value", "Market Cap",
-        "Closing Price", "Price Change", "Matched Volume", 
-        "Matched Value", "Opening Price", "Highest Price", "Lowest Price"
+        "Closing Price", "Price Change", "Price Change %", 
+        "Matched Volume", "Matched Value"
     ]
     
     for col in numeric_cols:
@@ -65,7 +68,7 @@ def load_stock_data(file_path):
             df[col] = df[col].astype(str).str.replace(",", "")
             df[col] = pd.to_numeric(df[col], errors="coerce")
     
-    df = df.drop_duplicates().dropna()
+    # Sắp xếp theo ngày
     df = df.sort_values("Date").reset_index(drop=True)
     
     return df
