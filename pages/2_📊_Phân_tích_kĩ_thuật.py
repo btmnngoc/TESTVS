@@ -110,23 +110,9 @@ with tab1:
     st.plotly_chart(fig_overview, use_container_width=True)
 
 with tab2:
-    def calculate_price_changes(df):
-    # Tính biến động giá từng ngày
-    df['Daily_Change'] = df['Price Change']
-    df['Daily_Change_Pct'] = df['Price Change %']
-    
-    # Tính tổng tích lũy
-    df['Cumulative_Change'] = df['Daily_Change'].cumsum()
-    df['Cumulative_Change_Pct'] = (1 + df['Daily_Change_Pct']/100).cumprod() - 1
-    
-    return df
-
-    df = calculate_price_changes(df)
-
-# ======= 5. Vẽ biểu đồ thác nước =======
+   
     st.subheader(f"Biến động giá {selected_stock} ({days_to_show} ngày gần nhất)")
     # === Tab biến động giá ===
-    st.subheader("Biểu đồ Thác nước Biến động Giá")
     
     fig_waterfall = go.Figure(go.Waterfall(
     name="Biến động giá",
