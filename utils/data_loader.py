@@ -46,8 +46,7 @@ def clean_data(df):
     return df_long
 
 import pandas as pd
-
-import pandas as pd
+import numpy as np
 
 def load_stock_data(file_path):
     """Tải và tiền xử lý dữ liệu cổ phiếu"""
@@ -70,5 +69,38 @@ def load_stock_data(file_path):
     
     # Sắp xếp theo ngày
     df = df.sort_values("Date").reset_index(drop=True)
+    
+    return df
+
+def calculate_technical_indicators(df):
+    """Tính toán các chỉ báo kỹ thuật"""
+    df = df.copy()
+    
+    # SMA (Simple Moving Average)
+    df['SMA_14'] = df['Closing Price'].rolling(window=14).mean()
+    df['SMA_50'] = df['Closing Price'].rolling(window=50).mean()
+    
+    # RSI (Relative Strength Index)
+    def compute_rsi(prices, period=14):
+        delta = prices.diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        rs = gain / loss
+        return 100 - (100 / (1 + rs))
+    
+    df['RSI_14'] = compute_rsi(df['Closing Price'])
+    
+    # MACD (Moving Average Convergence Divergence)
+    df['EMA_12'] = df['Closing Price'].ewm(span=12, adjust=False).mean()
+    df['EMA_26'] = df['Closing Price'].ewm(span=26, adjust=False).mean()
+    df['MACD'] = df['EMA_12'] - df['EMA_26']
+    df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean()
+    df['Histogram'] = df['MACD'] - df['Signal_Line']
+    
+    # Bollinger Bands
+    df['BB_middle'] = df['Closing Price'].rolling(window=20).mean()
+    df['BB_std'] = df['Closing Price'].rolling(window=20).std()
+    df['BB_upper'] = df['BB_middle'] + 2 * df['BB_std']
+    df['BB_lower'] = df['BB_middle'] - 2 * df['BB_std']
     
     return df
