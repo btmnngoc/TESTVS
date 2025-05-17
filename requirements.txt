@@ -8,15 +8,3 @@ plotly
 matplotlib
 seaborn
 
-# Data processing
-scikit-learn
-cvxpy
-
-# Optional (for advanced features)
-keras
-tensorflow
-st-annotated-text
-
-# Utilities
-python-dateutil
-pytest# For testing
