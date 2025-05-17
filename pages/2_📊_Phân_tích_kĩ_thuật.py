@@ -115,13 +115,13 @@ with tab2:
     # === Tab biến động giá ===
     
     fig_waterfall = go.Figure(go.Waterfall(
-    name="Biến động giá",
-    x=df['Date'],
-    y=df['Daily_Change'],
-    textposition="outside",
-    text=df['Daily_Change'].round(2),
-    connector={"line":{"color":"rgb(63, 63, 63)"}},
-    ))
+        name="Biến động giá",
+        x=df['Date'],
+        y=df['Daily_Change'],
+        textposition="outside",
+        text=df['Daily_Change'].round(2),
+        connector={"line":{"color":"rgb(63, 63, 63)"}},
+        ))
 
     fig_waterfall.update_layout(
         title=f"Biến động giá hàng ngày - {selected_stock}",
