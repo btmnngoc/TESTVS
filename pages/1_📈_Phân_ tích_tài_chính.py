@@ -8,8 +8,14 @@ from utils.data_loader import load_data, clean_data
 from utils.visualization import create_growth_chart, create_bar_chart
 
 # Tiêu đề trang
-st.title("📈 Phân tích Tăng trưởng Chỉ số Tài chính")
-
+st.markdown(
+    """
+    <div style='text-align: center; border-bottom: 1px solid #ccc; padding-bottom: 10px;'>
+        <div style='font-size: 2.8rem; font-weight: 900; color: #FD6200;'>DABFIN</div> 
+        <div style='font-size: 2.5rem; font-weight: 900; color: #0E6994;'>PHÂN TÍCH TÀI CHÍNH DOANH NGHIỆP</div>
+    </div>
+    """,
+    unsafe_allow_html=True)
 # Tải dữ liệu
 df = load_data("6.2 (his) financialreport_metrics_FPT_CMG_processed.csv")
 df_long = clean_data(df)
