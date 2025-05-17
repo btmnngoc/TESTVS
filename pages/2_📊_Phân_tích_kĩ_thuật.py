@@ -7,7 +7,14 @@ from utils.data_loader import load_stock_data
 
 # ======= 1. Thiết lập trang =======
 st.set_page_config(layout="wide")
-st.title("📈 Phân tích Kỹ thuật Tích hợp")
+st.markdown(
+    """
+    <div style='text-align: center; border-bottom: 1px solid #ccc; padding-bottom: 10px;'>
+        <div style='font-size: 2.8rem; font-weight: 900; color: #FD6200;'>DABFIN</div> 
+        <div style='font-size: 2.5rem; font-weight: 900; color: #0E6994;'>PHÂN TÍCH KĨ THUẬT CỔ PHIẾU</div>
+    </div>
+    """,
+    unsafe_allow_html=True)
 
 # ======= 2. Tải và xử lý dữ liệu =======
 @st.cache_data
@@ -218,6 +225,15 @@ with tab3:
     fig_bb.update_layout(height=500, hovermode="x unified")
     st.plotly_chart(fig_bb, use_container_width=True)
 
+    with st.expander("📌 Giải thích tín hiệu"):
+        st.markdown("""
+        - **Dải Bollinger**: Đo lường biến động giá
+        - **Giá chạm dải trên**: Có thể quá mua (overbought)
+        - **Giá chạm dải dưới**: Có thể quá bán (oversold)
+        - **Bóp dải**: Chuẩn bị có biến động mạnh
+        """)
+
+
 with tab4:
     # === Tab MACD & RSI ===
     st.subheader("MACD và RSI")
@@ -245,6 +261,21 @@ with tab4:
     
     fig.update_layout(height=700, hovermode="x unified", yaxis2=dict(range=[0,100]))
     st.plotly_chart(fig, use_container_width=True)
+
+    with st.expander("📌 Giải thích tín hiệu"):
+        st.markdown("""
+        - **MACD > Signal**: Tín hiệu tăng giá
+        - **MACD < Signal**: Tín hiệu giảm giá
+        - **Histogram tăng**: Động lực tăng đang mạnh lên
+        - **Histogram giảm**: Động lực tăng đang yếu đi
+        """)
+
+    with st.expander("📌 Giải thích tín hiệu"):
+        st.markdown("""
+        - **RSI > 70**: Quá mua, có thể điều chỉnh giảm
+        - **RSI < 30**: Quá bán, có thể phục hồi
+        - **Phân kỳ RSI**: Cảnh báo đảo chiều tiềm năng
+        """)
 
 with tab5:
     # === Tab dữ liệu ===
