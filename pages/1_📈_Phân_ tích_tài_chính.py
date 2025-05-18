@@ -205,7 +205,6 @@ with tab3:
                         'font-size': '12px'
                     }),
             use_container_width=True,
-            height=min(400, 35 * len(pivot_df) + 3)
         )        
      # Tự động điều chỉnh chiều cao
     else:
