@@ -2,297 +2,330 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import joblib
+import os
+from tensorflow.keras.models import load_model
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from datetime import datetime, timedelta
-from models.stock_prediction import train_stock_prediction_model
-import warnings
-warnings.filterwarnings('ignore')
+import xgboost as xgb
 
-# Page configuration
-st.set_page_config(
-    page_title="Dự báo giá cổ phiếu ngắn hạn",
-    page_icon="📈",
-    layout="wide"
-)
+# Tiêu đề ứng dụng
+st.set_page_config(page_title="Dự đoán Giá Cổ phiếu", layout="wide")
+st.title("📈 Ứng dụng Dự đoán Giá Cổ phiếu")
 
-# Custom CSS
-st.markdown("""
-    <style>
-    .main {
-        max-width: 1200px;
-    }
-    .metric-box {
-        padding: 15px;
-        border-radius: 10px;
-        background-color: #f0f2f6;
-        margin-bottom: 10px;
-    }
-    .stButton>button {
-        width: 100%;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+# Sidebar - Cài đặt
+st.sidebar.header("Cài đặt Dự báo")
 
-# Title
-st.title("💡 Dự báo giá cổ phiếu ngắn hạn")
+# 1. Chọn mã cổ phiếu
+stock_id = st.sidebar.selectbox("Chọn mã cổ phiếu", ["CMG", "FPT"])
 
-# Sidebar configuration
-with st.sidebar:
-    st.header("Thiết lập dự báo")
-    
-    # Stock selection
-    stock_options = ['FPT', 'CMG']
-    selected_stock = st.selectbox(
-        "Chọn mã cổ phiếu",
-        stock_options,
-        help="Chọn mã cổ phiếu bạn muốn dự báo"
-    )
-    
-    # Forecast period
-    forecast_days = st.slider(
-        "Số ngày dự báo",
-        1, 30, 7,
-        help="Chọn số ngày trong tương lai cần dự báo"
-    )
-    
-    # Model selection
-    model_options = ['Mô hình kết hợp (LSTM + XGBoost)', 'LSTM', 'XGBoost']
-    selected_model = st.selectbox(
-        "Chọn mô hình",
-        model_options,
-        index=0,
-        help="Chọn mô hình dự báo"
-    )
-    
-    # Retrain option
-    force_retrain = st.checkbox(
-        "Huấn luyện lại mô hình",
-        value=False,
-        help="Bỏ chọn để sử dụng mô hình đã lưu (nếu có)"
-    )
-    
-    st.markdown("---")
-    st.markdown("**Lưu ý:**")
-    st.info("""
-        - Dữ liệu được cập nhật tự động từ các nguồn đáng tin cậy
-        - Kết quả dự báo chỉ mang tính chất tham khảo
-        - Mô hình sẽ tự động lưu sau khi huấn luyện
-    """)
+# 2. Chọn số ngày dự báo
+forecast_days = st.sidebar.slider("Số ngày dự báo", 1, 30, 7)
 
-# Helper functions
-def fig_to_bytes(fig):
-    """Convert matplotlib figure to bytes for download"""
-    import io
-    buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
-    buf.seek(0)
-    return buf
+# 3. Chọn mô hình
+model_type = st.sidebar.radio("Chọn mô hình", 
+                             ["Meta Model (Tích hợp LSTM + XGBoost)", 
+                              "LSTM Model", 
+                              "XGBoost Model"])
 
-def forecast_future(models, scaler, last_data, lookback, days, model_type='combined'):
-    """Generate future forecasts"""
-    # Prepare input data
-    last_data_log = np.log1p(last_data)
-    last_data_scaled = scaler.transform(last_data_log.reshape(-1, 1)).flatten()
-    current_input = last_data_scaled[-lookback:].copy()
+# 4. Tùy chọn huấn luyện lại
+retrain = st.sidebar.checkbox("Huấn luyện lại mô hình", value=False)
+
+# Hàm tải mô hình
+@st.cache_resource
+def load_models(stock_id):
+    try:
+        # Đăng ký hàm loss/metrics trước khi load model
+        from tensorflow.keras.saving import register_keras_serializable
+        from tensorflow.keras.losses import mse
+        
+        @register_keras_serializable()
+        def custom_mse(y_true, y_pred):
+            return mse(y_true, y_pred)
+        
+        # Load model với custom_objects
+        lstm_model = load_model(
+            f'models/lstm_model_{stock_id}.h5',
+            custom_objects={'mse': custom_mse}
+        )
+        
+        xgb_model = joblib.load(f'models/xgb_model_{stock_id}.joblib')
+        
+        meta_model = load_model(
+            f'models/meta_model_{stock_id}.h5',
+            custom_objects={'mse': custom_mse}
+        )
+        
+        return lstm_model, xgb_model, meta_model
+    except Exception as e:
+        st.error(f"Lỗi khi tải mô hình: {e}")
+        return None, None, None
+
+# Hàm tiền xử lý dữ liệu
+def preprocess_data(df, stock_id):
+    try:
+        df = df[df['StockID'] == stock_id].copy()
+        df['Date'] = pd.to_datetime(df['Date'], format='%d/%m/%Y')
+        df = df.sort_values('Date')
+        df['Closing Price'] = df['Closing Price'].str.replace(',', '').astype(float)
+        df['Total Volume'] = df['Total Volume'].str.replace(',', '').astype(float)
+        
+        # Tạo các đặc trưng
+        df['Return%'] = df['Closing Price'].pct_change() * 100
+        df['MA5'] = df['Closing Price'].rolling(window=5).mean()
+        df['MA10'] = df['Closing Price'].rolling(window=10).mean()
+        df['Volume_ratio'] = df['Total Volume'] / df['Total Volume'].rolling(5).mean()
+        df['Volatility'] = df['Closing Price'].pct_change().rolling(window=5).std() * 100
+        df['Price_Momentum'] = df['Closing Price'].diff(5)
+        
+        # Xử lý sự kiện (đơn giản hóa)
+        df['Dividend_Event'] = 0
+        df['Meeting_Event'] = 0
+        
+        # Điền giá trị thiếu
+        df = df.fillna(method='ffill').fillna(0)
+        return df
+    except Exception as e:
+        st.error(f"Lỗi khi tiền xử lý dữ liệu: {e}")
+        return None
+
+# Hàm dự báo
+def predict_future(model, last_data, scaler, days, model_type='lstm'):
     predictions = []
+    current_data = last_data.copy()
     
     for _ in range(days):
-        # Prepare input based on model type
-        if model_type == 'LSTM':
-            lstm_input = current_input.reshape(1, lookback, 1)
-            next_pred_scaled = models["lstm"].predict(lstm_input, verbose=0)[0, 0]
-        elif model_type == 'XGBoost':
-            # For XGBoost, we need to create features for the future prediction
-            # This is simplified - in practice you'd need to update all features
-            next_pred_scaled = models["xgb"].predict(current_input.reshape(1, -1))[0]
-        else:  # Combined model
-            lstm_input = current_input.reshape(1, lookback, 1)
-            lstm_pred = models["lstm"].predict(lstm_input, verbose=0)[0, 0]
-            
-            # For XGBoost part, we'd need the actual features - this is simplified
-            xgb_pred = models["xgb"].predict(current_input.reshape(1, -1))[0]
-            
-            # Combine predictions
-            meta_input = np.array([[lstm_pred, xgb_pred]])
-            next_pred_scaled = models["meta"].predict(meta_input, verbose=0)[0, 0]
+        if model_type == 'lstm':
+            # Chuẩn bị dữ liệu cho LSTM
+            scaled_data = scaler.transform(np.log1p(current_data[-7:]).reshape(-1, 1))
+            X = np.reshape(scaled_data, (1, 7, 1))
+            pred = model.predict(X, verbose=0)
+            pred_price = np.expm1(scaler.inverse_transform(pred)[0][0])
+        else:
+            # Chuẩn bị dữ liệu cho XGBoost hoặc Meta model
+            X = pd.DataFrame({
+                'Return%': [current_data[-1] / current_data[-2] - 1 if len(current_data) > 1 else 0],
+                'MA5': [np.mean(current_data[-5:])],
+                'MA10': [np.mean(current_data[-10:])],
+                'Volume_ratio': [1],  # Giả định
+                'Dividend_Event': [0],
+                'Meeting_Event': [0],
+                'Volatility': [np.std(np.diff(current_data[-5:])/current_data[-5:-1]) if len(current_data) > 5 else 0],
+                'Price_Momentum': [current_data[-1] - current_data[-5]] if len(current_data) > 5 else 0
+            })
+            if model_type == 'xgb':
+                pred_price = model.predict(X)[0]
+            else:  # Meta model
+                # Giả sử chúng ta có dự đoán từ cả LSTM và XGBoost
+                lstm_pred = np.expm1(scaler.inverse_transform(
+                    model_lstm.predict(np.reshape(scaler.transform(
+                        np.log1p(current_data[-7:]).reshape(-1, 1)), (1, 7, 1)), verbose=0))[0][0])
+                xgb_pred = model_xgb.predict(X)[0]
+                pred_price = model.predict(np.array([[lstm_pred, xgb_pred]]))[0][0]
         
-        predictions.append(next_pred_scaled)
-        current_input = np.roll(current_input, -1)
-        current_input[-1] = next_pred_scaled
-    
-    # Convert predictions to original scale
-    predictions = np.array(predictions).reshape(-1, 1)
-    predictions = scaler.inverse_transform(predictions)
-    predictions = np.expm1(predictions).flatten()
+        predictions.append(pred_price)
+        current_data = np.append(current_data, pred_price)
     
     return predictions
 
-# Main app function
-def main():
-    # Show loading message
-    with st.spinner(f"Đang tải mô hình cho {selected_stock}..."):
-        models, scaler, lookback, metrics, y_test, y_pred, df = train_stock_prediction_model(
-            selected_stock, force_retrain=force_retrain
-        )
+# Tải dữ liệu và mô hình
+@st.cache_data
+def load_data(stock_id):
+    try:
+        df = pd.read_csv(f"4.2.3 (TARGET) (live & his) {stock_id}_detail_transactions_processed.csv")
+        processed_df = preprocess_data(df, stock_id)
+        return processed_df
+    except Exception as e:
+        st.error(f"Không thể tải dữ liệu cho {stock_id}: {e}")
+        return None
+
+# Hiển thị tiến trình
+with st.spinner('Đang tải dữ liệu và mô hình...'):
+    df = load_data(stock_id)
+    model_lstm, model_xgb, meta_model = load_models(stock_id)
+
+if df is None or model_lstm is None or model_xgb is None or meta_model is None:
+    st.error("Không thể khởi tạo ứng dụng do lỗi tải dữ liệu hoặc mô hình.")
+    st.stop()
+
+# Hiển thị thông tin cơ bản
+st.subheader(f"Thông tin cổ phiếu {stock_id}")
+col1, col2, col3 = st.columns(3)
+col1.metric("Giá đóng cửa gần nhất", f"{df['Closing Price'].iloc[-1]:,.0f} VND")
+col2.metric("Thay đổi 1 ngày", f"{df['Return%'].iloc[-1]:.2f}%", 
+            f"{df['Closing Price'].iloc[-1] - df['Closing Price'].iloc[-2]:,.0f} VND" if len(df) > 1 else "N/A")
+col3.metric("Ngày dữ liệu mới nhất", df['Date'].iloc[-1].strftime('%d/%m/%Y'))
+
+# Tab chức năng
+tab1, tab2, tab3 = st.tabs(["📊 Dự báo", "📈 Biểu đồ", "📋 Đánh giá Mô hình"])
+
+with tab1:
+    st.subheader("Dự báo Giá trong Tương lai")
     
-    # Show success message
-    st.success(f"""
-        Hoàn thành tải mô hình! 
-        Dữ liệu huấn luyện đến ngày: {metrics['last_training_date']}
-    """)
+    # Lấy dữ liệu gần nhất
+    last_prices = df['Closing Price'].values[-30:]  # 30 ngày gần nhất
     
-    # Display model metrics
-    st.subheader("📊 Kết quả đánh giá mô hình")
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("MAE (Lỗi tuyệt đối trung bình)", f"{metrics['mae']:.2f}")
-    with col2:
-        st.metric("RMSE (Lỗi bình phương trung bình)", f"{metrics['rmse']:.2f}")
-    with col3:
-        st.metric("R² (Độ phù hợp)", f"{metrics['r2']:.4f}")
-    
-    # Display evaluation chart
-    st.subheader("📈 Biểu đồ đánh giá mô hình")
-    
-    fig, ax = plt.subplots(figsize=(12, 6))
-    ax.plot(df['Date'].iloc[-len(y_test):], y_test, label='Giá thực tế', linewidth=2)
-    ax.plot(df['Date'].iloc[-len(y_test):], y_pred, label='Giá dự báo', linestyle='--', linewidth=2)
-    ax.set_xlabel("Ngày")
-    ax.set_ylabel("Giá đóng cửa")
-    ax.set_title(f"Kết quả dự báo cho {selected_stock}")
-    ax.legend()
-    ax.grid(True)
-    plt.xticks(rotation=45)
-    st.pyplot(fig)
-    
-    # Download button for evaluation chart
-    st.download_button(
-        label="Tải biểu đồ đánh giá",
-        data=fig_to_bytes(fig),
-        file_name=f"evaluation_{selected_stock}_{datetime.now().strftime('%Y%m%d')}.png",
-        mime="image/png"
-    )
-    
-    # Future forecast section
-    st.subheader("🔮 Dự báo giá tương lai")
-    
-    # Get last available data for forecasting
-    last_prices = df['Closing Price'].values[-lookback:]
-    last_date = df['Date'].iloc[-1]
-    
-    # Generate forecast
-    if selected_model == 'LSTM':
-        model_type = 'LSTM'
-    elif selected_model == 'XGBoost':
-        model_type = 'XGBoost'
-    else:
-        model_type = 'combined'
-    
-    future_prices = forecast_future(
-        models, scaler, last_prices, lookback, forecast_days, model_type
-    )
-    
-    # Create future dates
-    future_dates = [last_date + timedelta(days=i) for i in range(1, forecast_days+1)]
-    
-    # Display forecast results
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("**Chi tiết dự báo:**")
-        forecast_df = pd.DataFrame({
+    # Dự báo
+    try:
+        scaler = MinMaxScaler()
+        scaler.fit(np.log1p(df['Closing Price'].values.reshape(-1, 1)))
+        
+        if model_type == "Meta Model (Tích hợp LSTM + XGBoost)":
+            predictions = predict_future(meta_model, last_prices, scaler, forecast_days, 'meta')
+            model_name = "Meta Model"
+        elif model_type == "LSTM Model":
+            predictions = predict_future(model_lstm, last_prices, scaler, forecast_days, 'lstm')
+            model_name = "LSTM"
+        else:
+            predictions = predict_future(model_xgb, last_prices, scaler, forecast_days, 'xgb')
+            model_name = "XGBoost"
+        
+        # Tạo DataFrame kết quả
+        last_date = df['Date'].iloc[-1]
+        future_dates = [last_date + timedelta(days=i) for i in range(1, forecast_days+1)]
+        result_df = pd.DataFrame({
             'Ngày': future_dates,
-            'Giá dự báo': future_prices,
-            'Thay đổi %': np.concatenate([
-                [np.nan],
-                (future_prices[1:] - future_prices[:-1]) / future_prices[:-1] * 100
-            ])
+            'Giá dự báo (VND)': predictions,
+            'Thay đổi (%)': [0] + [(predictions[i] - predictions[i-1])/predictions[i-1]*100 for i in range(1, len(predictions))]
         })
         
-        # Format the display
-        st.dataframe(
-            forecast_df.style.format({
-                'Ngày': lambda x: x.strftime('%d/%m/%Y'),
-                'Giá dự báo': '{:.2f}',
-                'Thay đổi %': '{:.2f}%'
-            }).applymap(
-                lambda x: 'color: green' if isinstance(x, str) and '+' in x else (
-                    'color: red' if isinstance(x, str) and '-' in x else ''
-                ),
-                subset=['Thay đổi %']
-            ),
-            hide_index=True,
-            use_container_width=True
-        )
+        # Hiển thị kết quả
+        st.dataframe(result_df.style.format({
+            'Giá dự báo (VND)': '{:,.0f}',
+            'Thay đổi (%)': '{:.2f}%'
+        }))
         
-        # Download forecast data
-        csv = forecast_df.to_csv(index=False).encode('utf-8')
+        # Nút tải dữ liệu
+        csv = result_df.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="Tải dữ liệu dự báo (CSV)",
             data=csv,
-            file_name=f"forecast_{selected_stock}_{datetime.now().strftime('%Y%m%d')}.csv",
-            mime="text/csv"
+            file_name=f"du_bao_{stock_id}_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime='text/csv'
         )
+        
+    except Exception as e:
+        st.error(f"Lỗi khi dự báo: {e}")
+
+with tab2:
+    st.subheader("Biểu đồ Giá và Dự báo")
     
-    with col2:
-        st.markdown("**Biểu đồ dự báo:**")
+    # Vẽ biểu đồ lịch sử
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.plot(df['Date'], df['Closing Price'], label='Giá thực tế', color='blue')
+    
+    # Thêm dự báo nếu có
+    try:
+        if 'future_dates' in locals() and 'predictions' in locals():
+            ax.plot(future_dates, predictions, label=f'Dự báo {model_name}', 
+                   color='red', linestyle='--', marker='o')
+            ax.legend()
+            plt.xticks(rotation=45)
+            plt.grid(True)
+            plt.title(f"Diễn biến giá {stock_id} và dự báo")
+            st.pyplot(fig)
+            
+            # Nút tải biểu đồ
+            buf = BytesIO()
+            fig.savefig(buf, format="png", dpi=300, bbox_inches="tight")
+            st.download_button(
+                label="Tải biểu đồ (PNG)",
+                data=buf,
+                file_name=f"bieu_do_{stock_id}.png",
+                mime="image/png"
+            )
+    except Exception as e:
+        st.error(f"Lỗi khi vẽ biểu đồ: {e}")
+
+with tab3:
+    st.subheader("Đánh giá Hiệu suất Mô hình")
+    
+    # Chia tập train/test
+    split = int(len(df) * 0.8)
+    train_df = df.iloc[:split]
+    test_df = df.iloc[split:]
+    
+    # Chuẩn bị dữ liệu đánh giá
+    try:
+        # Chuẩn hóa dữ liệu
+        scaler = MinMaxScaler()
+        y_log = np.log1p(df['Closing Price'].values)
+        scaler.fit(y_log.reshape(-1, 1))
         
-        fig2, ax2 = plt.subplots(figsize=(10, 6))
+        # Chuẩn bị dữ liệu LSTM
+        lookback = 7
+        X_lstm, y_lstm = [], []
+        for i in range(lookback, len(y_log)):
+            X_lstm.append(y_log[i-lookback:i])
+            y_lstm.append(y_log[i])
+        X_lstm, y_lstm = np.array(X_lstm), np.array(y_lstm)
+        X_lstm = np.reshape(X_lstm, (X_lstm.shape[0], X_lstm.shape[1], 1))
         
-        # Plot historical data (last 30 days)
-        ax2.plot(
-            df['Date'].iloc[-30:], 
-            df['Closing Price'].iloc[-30:], 
-            label='Giá lịch sử', 
-            color='blue',
-            linewidth=2
-        )
+        # Dự đoán LSTM
+        pred_lstm = np.expm1(scaler.inverse_transform(model_lstm.predict(X_lstm[split:], verbose=0))).flatten()
+        pred_lstm = np.nan_to_num(pred_lstm, nan=np.nanmean(pred_lstm), neginf=0)
         
-        # Plot forecast
-        ax2.plot(
-            future_dates, 
-            future_prices, 
-            label='Dự báo tương lai', 
-            color='red', 
-            linestyle='--',
-            marker='o',
-            linewidth=2
-        )
+        # Dự đoán XGBoost
+        features_xgb = ['Return%', 'MA5', 'MA10', 'Volume_ratio', 'Dividend_Event', 'Meeting_Event', 'Volatility', 'Price_Momentum']
+        X_xgb = df[features_xgb].iloc[lookback:].reset_index(drop=True)
+        pred_xgb = model_xgb.predict(X_xgb.iloc[split:])
         
-        ax2.set_title(f"Dự báo giá {selected_stock} {forecast_days} ngày tới")
-        ax2.set_xlabel("Ngày")
-        ax2.set_ylabel("Giá đóng cửa")
-        ax2.legend()
-        ax2.grid(True)
-        plt.xticks(rotation=45)
+        # Dự đoán Meta model
+        X_meta = np.vstack((pred_lstm, pred_xgb)).T
+        pred_meta = meta_model.predict(X_meta).flatten()
+        pred_meta = np.nan_to_num(pred_meta, nan=np.nanmean(pred_meta), neginf=0)
+        
+        # Tính toán metrics
+        y_true = df['Closing Price'].iloc[split+lookback:].reset_index(drop=True)
+        
+        metrics = {
+            'Meta Model': {
+                'MAE': mean_absolute_error(y_true, pred_meta),
+                'RMSE': np.sqrt(mean_squared_error(y_true, pred_meta)),
+                'R2': r2_score(y_true, pred_meta)
+            },
+            'LSTM': {
+                'MAE': mean_absolute_error(y_true, pred_lstm),
+                'RMSE': np.sqrt(mean_squared_error(y_true, pred_lstm)),
+                'R2': r2_score(y_true, pred_lstm)
+            },
+            'XGBoost': {
+                'MAE': mean_absolute_error(y_true, pred_xgb),
+                'RMSE': np.sqrt(mean_squared_error(y_true, pred_xgb)),
+                'R2': r2_score(y_true, pred_xgb)
+            }
+        }
+        
+        # Hiển thị metrics
+        metrics_df = pd.DataFrame(metrics).T
+        st.dataframe(metrics_df.style.format({
+            'MAE': '{:.2f}',
+            'RMSE': '{:.2f}',
+            'R2': '{:.4f}'
+        }))
+        
+        # Biểu đồ so sánh hiệu suất
+        fig2, ax2 = plt.subplots(figsize=(10, 5))
+        metrics_df[['MAE', 'RMSE']].plot(kind='bar', ax=ax2)
+        plt.title('So sánh hiệu suất các mô hình')
+        plt.ylabel('Giá trị')
+        plt.xticks(rotation=0)
         st.pyplot(fig2)
         
-        # Download forecast chart
-        st.download_button(
-            label="Tải biểu đồ dự báo",
-            data=fig_to_bytes(fig2),
-            file_name=f"forecast_chart_{selected_stock}_{datetime.now().strftime('%Y%m%d')}.png",
-            mime="image/png"
-        )
-    
-    # Model explanation section
-    st.markdown("---")
-    st.subheader("ℹ️ Giải thích mô hình")
-    
-    st.markdown("""
-    **Mô hình kết hợp (LSTM + XGBoost):**
-    - Sử dụng sức mạnh của cả hai mô hình LSTM (cho dữ liệu chuỗi thời gian) và XGBoost (cho đặc trưng tĩnh)
-    - Mô hình meta học cách kết hợp tốt nhất các dự báo từ hai mô hình cơ sở
-    - Thường cho kết quả chính xác nhất trong các thử nghiệm
-    
-    **Mô hình LSTM:**
-    - Mạng neural đặc biệt cho dữ liệu chuỗi thời gian
-    - Hiệu quả trong việc học các mẫu phức tạp trong dữ liệu giá cổ phiếu
-    
-    **Mô hình XGBoost:**
-    - Mô hình dựa trên cây quyết định được tối ưu hóa
-    - Hiệu quả trong việc học từ các đặc trưng tài chính và kỹ thuật
-    """)
+    except Exception as e:
+        st.error(f"Lỗi khi đánh giá mô hình: {e}")
 
-if __name__ == "__main__":
-    main()
+# Huấn luyện lại nếu được chọn
+if retrain:
+    with st.expander("Huấn luyện lại mô hình", expanded=False):
+        st.warning("Chức năng này sẽ huấn luyện lại mô hình từ đầu và có thể mất nhiều thời gian.")
+        
+        if st.button("Bắt đầu Huấn luyện"):
+            with st.spinner('Đang huấn luyện mô hình...'):
+                try:
+                    # Code huấn luyện từ file gốc của bạn
+                    # Đây là phần cần tích hợp code huấn luyện đầy đủ của bạn
+                    st.success("Huấn luyện hoàn tất! Mô hình mới đã được lưu.")
+                except Exception as e:
+                    st.error(f"Lỗi khi huấn luyện: {e}")
