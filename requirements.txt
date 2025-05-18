@@ -3,8 +3,17 @@ streamlit
 pandas
 numpy
 
+# Machine Learning
+scikit-learn
+xgboost
+
+# Deep Learning
+tensorflow
+
 # Visualization
-plotly
 matplotlib
 seaborn
+plotly
 
+# Optional (tối ưu thêm)
+joblib

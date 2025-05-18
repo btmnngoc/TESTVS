@@ -87,3 +87,4 @@ def create_bar_chart(df, indicators, company, period):
     fig.update_xaxes(tickangle=45)
     
     return fig
+

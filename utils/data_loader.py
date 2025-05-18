@@ -70,3 +70,5 @@ def load_stock_data(file_path):
     df = df.sort_values("Date").reset_index(drop=True)
     
     return df
+
+
