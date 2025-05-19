@@ -96,13 +96,15 @@ def predict_stock_price(stock_id, days_to_predict=7):
     
     # Load các model đã train
     if stock_id == 'FPT':
-        model_lstm = load_model('models/lstm_model_FPT.h5')
-        model_xgb = joblib.load('models/xgb_model_FPT.joblib')
-        meta_model = load_model('models/meta_model_FPT.h5')
+        model_lstm = load_model('models/lstm_model_FPT.h5', 
+                              custom_objects={'mse': losses.MeanSquaredError()})
+        meta_model = load_model('models/meta_model_FPT.h5',
+                              custom_objects={'mse': losses.MeanSquaredError()})
     else:
-        model_lstm = load_model('models/lstm_model_CMG.h5')
-        model_xgb = joblib.load('models/xgb_model_CMG.joblib')
-        meta_model = load_model('models/meta_model_CMG.h5')
+        model_lstm = load_model('models/lstm_model_CMG.h5',
+                              custom_objects={'mse': losses.MeanSquaredError()})
+        meta_model = load_model('models/meta_model_CMG.h5',
+                              custom_objects={'mse': losses.MeanSquaredError()})
     
     # Chuẩn bị dữ liệu cho dự báo
     features_xgb = ['Return%', 'MA5', 'MA10', 'Volume_ratio', 'Dividend_Event', 'Meeting_Event', 'Volatility', 'Price_Momentum'] + [
