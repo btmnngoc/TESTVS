@@ -97,16 +97,21 @@ def predict_stock_price(stock_id, days_to_predict=7):
     df = preprocess_data(stock_id)
     
     # Load các model đã train
+    custom_objects = {
+        'MeanSquaredError': MeanSquaredError,
+        'Adam': Adam
+    }
+    
     if stock_id == 'FPT':
         model_lstm = load_model('models/lstm_model_FPT.h5', 
-                              custom_objects={'MeanSquaredError': losses.MeanSquaredError})
+                              custom_objects=custom_objects)
         meta_model = load_model('models/meta_model_FPT.h5',
-                              custom_objects={'MeanSquaredError': losses.MeanSquaredError})
+                              custom_objects=custom_objects)
     else:
         model_lstm = load_model('models/lstm_model_CMG.h5',
-                              custom_objects={'MeanSquaredError': losses.MeanSquaredError})
+                              custom_objects=custom_objects)
         meta_model = load_model('models/meta_model_CMG.h5',
-                              custom_objects={'MeanSquaredError': losses.MeanSquaredError})
+                              custom_objects=custom_objects)
     
     # Chuẩn bị dữ liệu cho dự báo
     features_xgb = ['Return%', 'MA5', 'MA10', 'Volume_ratio', 'Dividend_Event', 'Meeting_Event', 'Volatility', 'Price_Momentum'] + [
