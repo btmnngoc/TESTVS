@@ -102,7 +102,7 @@ def load_stock_data(stock_id):
 @st.cache_resource
 def load_models(stock_id):
     try:
-        model_lstm = load_model(f"models/lstm_model_{stock_id}.h5")
+        model_lstm = load_model(f"models/lstm_model_{stock_id}.h5", compile=False)
         model_xgb = joblib.load(f"models/xgb_model_{stock_id}.joblib")
         meta_model = load_model(f"models/meta_model_{stock_id}.h5")
         return {'lstm': model_lstm, 'xgb': model_xgb, 'meta': meta_model}
