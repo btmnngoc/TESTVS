@@ -1,237 +1,191 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras.models import load_model
-import xgboost as xgb
-import joblib
 import matplotlib.pyplot as plt
-import os
 from datetime import datetime, timedelta
-from tensorflow.keras import losses
-
+from models.stock_prediction import train_stock_prediction_model
+import warnings
+warnings.filterwarnings('ignore')
 
 # Thiết lập trang
-st.set_page_config(page_title="Dự báo giá cổ phiếu", page_icon="📈", layout="wide")
-st.title("📈 Dự báo giá cổ phiếu FPT và CMG")
+st.set_page_config(page_title="Dự báo giá cổ phiếu ngắn hạn", page_icon="📈", layout="wide")
+st.title("💡 Dự báo giá cổ phiếu ngắn hạn")
 
-# Hàm tiền xử lý dữ liệu
-def preprocess_data(stock_id):
-    # Load dữ liệu giao dịch
+# Sidebar để chọn cổ phiếu và các tham số
+with st.sidebar:
+    st.header("Thiết lập dự báo")
+    stock_options = ['FPT', 'CMG']
+    selected_stock = st.selectbox("Chọn mã cổ phiếu", stock_options)
+    
+    forecast_days = st.slider("Số ngày dự báo", 1, 30, 7, 
+                             help="Chọn số ngày trong tương lai cần dự báo")
+    
+    model_options = ['Mô hình kết hợp (LSTM + XGBoost)', 'LSTM', 'XGBoost']
+    selected_model = st.selectbox("Chọn mô hình", model_options)
+    
+    st.markdown("---")
+    st.markdown("**Lưu ý:**")
+    st.info("Dữ liệu được cập nhật tự động từ các nguồn đáng tin cậy. Kết quả dự báo chỉ mang tính chất tham khảo.")
+
+# Hàm tải dữ liệu (có thể tách ra file utils/data_loader.py sau)
+@st.cache_data
+def load_data(stock_id):
     if stock_id == 'FPT':
         df = pd.read_csv("4.2.3 (TARGET) (live & his) FPT_detail_transactions_processed.csv")
     else:
         df = pd.read_csv("4.2.3 (TARGET) (live & his) CMG_detail_transactions_processed.csv")
     
+    # Xử lý dữ liệu như trong code gốc
     df = df[df['StockID'] == stock_id].copy()
     df['Date'] = pd.to_datetime(df['Date'], format='%d/%m/%Y')
     df = df.sort_values('Date')
     df['Closing Price'] = df['Closing Price'].str.replace(',', '').astype(float)
     df['Total Volume'] = df['Total Volume'].str.replace(',', '').astype(float)
-
-    # Tạo các đặc trưng
-    df['Return%'] = df['Closing Price'].pct_change() * 100
-    df['MA5'] = df['Closing Price'].rolling(window=5).mean()
-    df['MA10'] = df['Closing Price'].rolling(window=10).mean()
-    df['Volume_ratio'] = df['Total Volume'] / df['Total Volume'].rolling(5).mean()
-    df['Volatility'] = df['Closing Price'].pct_change().rolling(window=5).std() * 100
-    df['Price_Momentum'] = df['Closing Price'].diff(5)
-    df = df.fillna(0)
-
-    # Tích hợp dữ liệu sự kiện
-    df_dividend = pd.read_csv("3.2 (live & his) news_dividend_issue (FPT_CMG)_processed.csv")
-    df_meeting = pd.read_csv("3.3 (live & his) news_shareholder_meeting (FPT_CMG)_processed.csv")
-
-    df_dividend_stock = df_dividend[df_dividend['StockID'] == stock_id].copy()
-    df_meeting_stock = df_meeting[df_meeting['StockID'] == stock_id].copy()
-    df_dividend_stock.loc[:, 'Execution Date'] = pd.to_datetime(df_dividend_stock['Execution Date'], format='%d/%m/%Y', errors='coerce')
-    df_meeting_stock.loc[:, 'Execution Date'] = pd.to_datetime(df_meeting_stock['Execution Date'], format='%d/%m/%Y')
-
-    df['Dividend_Event'] = df['Date'].isin(df_dividend_stock['Execution Date']).astype(int)
-    df['Meeting_Event'] = df['Date'].isin(df_meeting_stock['Execution Date']).astype(int)
-
-    # Tích hợp dữ liệu tài chính
-    df_financial = pd.read_csv("6.5 (his) financialreport_metrics_Nhóm ngành_Công nghệ thông tin (of FPT_CMG)_processed.csv")
-    
-    def clean_financial_data(df):
-        df['Indicator'] = df['Indicator'].str.replace('\n', '', regex=False).str.replace(r'\s+', ' ', regex=True).str.strip()
-        for col in df.columns[3:]:
-            df[col] = df[col].str.replace(',', '').astype(float, errors='ignore')
-        return df
-    
-    df_financial = clean_financial_data(df_financial)
-    
-    indicators = [
-        'Tỷ suất lợi nhuận trên Vốn chủ sở hữu bình quân (ROEA)%',
-        'Tỷ lệ lãi EBIT%',
-        'Chỉ số giá thị trường trên giá trị sổ sách (P/B)Lần',
-        'Chỉ số giá thị trường trên thu nhập (P/E)Lần',
-        'P/SLần',
-        'Tỷ suất sinh lợi trên vốn dài hạn bình quân (ROCE)%',
-        'Thu nhập trên mỗi cổ phần (EPS)VNĐ'
-    ]
-    
-    df_financial_stock = df_financial[(df_financial['Stocks'].str.contains(stock_id)) & (df_financial['Indicator'].isin(indicators))].copy()
-    
-    quarters = ['Q1_2023', 'Q2_2023', 'Q3_2023', 'Q4_2023', 'Q1_2024', 'Q2_2024', 'Q3_2024', 'Q4_2024']
-    df_financial_melted = df_financial_stock.melt(id_vars=['Indicator'], value_vars=quarters, var_name='Quarter', value_name='Value')
-    
-    quarter_dates = {
-        'Q1_2023': '2023-01-01', 'Q2_2023': '2023-04-01', 'Q3_2023': '2023-07-01', 'Q4_2023': '2023-10-01',
-        'Q1_2024': '2024-01-01', 'Q2_2024': '2024-04-01', 'Q3_2024': '2024-07-01', 'Q4_2024': '2024-10-01'
-    }
-    
-    df_financial_melted['Date'] = df_financial_melted['Quarter'].map(quarter_dates)
-    df_financial_melted['Date'] = pd.to_datetime(df_financial_melted['Date'])
-    df_financial_pivot = df_financial_melted.pivot(index='Date', columns='Indicator', values='Value')
-    
-    df = df.merge(df_financial_pivot, left_on='Date', right_index=True, how='left')
-    df[indicators] = df[indicators].ffill()
-    df = df.dropna().reset_index(drop=True)
     
     return df
 
-# Hàm dự báo
-def predict_stock_price(stock_id, days_to_predict=7):
-    # Load dữ liệu
-    df = preprocess_data(stock_id)
+# Hàm hiển thị kết quả
+def display_results(df, y_test, y_pred, metrics):
+    col1, col2 = st.columns(2)
     
-    # Load các model đã train
-    custom_objects = {
-        'MeanSquaredError': MeanSquaredError,
-        'Adam': Adam
-    }
+    with col1:
+        st.subheader("Chỉ số đánh giá mô hình")
+        st.metric("MAE (Lỗi tuyệt đối trung bình)", f"{metrics['mae']:.2f}")
+        st.metric("RMSE (Lỗi bình phương trung bình)", f"{metrics['rmse']:.2f}")
+        st.metric("R² (Độ phù hợp)", f"{metrics['r2']:.4f}")
+        
+        st.markdown("---")
+        st.write("**Giải thích chỉ số:**")
+        st.info("- MAE: Sai số trung bình giữa giá thực và giá dự báo (càng thấp càng tốt)")
+        st.info("- RMSE: Tương tự MAE nhưng phạt nặng hơn các sai số lớn")
+        st.info("- R²: Tỷ lệ phương sai được giải thích bởi mô hình (1 là tốt nhất)")
     
-    if stock_id == 'FPT':
-        model_lstm = load_model('models/lstm_model_FPT.h5', 
-                              custom_objects=custom_objects)
-        meta_model = load_model('models/meta_model_FPT.h5',
-                              custom_objects=custom_objects)
-    else:
-        model_lstm = load_model('models/lstm_model_CMG.h5',
-                              custom_objects=custom_objects)
-        meta_model = load_model('models/meta_model_CMG.h5',
-                              custom_objects=custom_objects)
-    
-    # Chuẩn bị dữ liệu cho dự báo
-    features_xgb = ['Return%', 'MA5', 'MA10', 'Volume_ratio', 'Dividend_Event', 'Meeting_Event', 'Volatility', 'Price_Momentum'] + [
-        'Tỷ suất lợi nhuận trên Vốn chủ sở hữu bình quân (ROEA)%',
-        'Tỷ lệ lãi EBIT%',
-        'Chỉ số giá thị trường trên giá trị sổ sách (P/B)Lần',
-        'Chỉ số giá thị trường trên thu nhập (P/E)Lần',
-        'P/SLần',
-        'Tỷ suất sinh lợi trên vốn dài hạn bình quân (ROCE)%',
-        'Thu nhập trên mỗi cổ phần (EPS)VNĐ'
-    ]
-    
-    X_xgb = df[features_xgb]
-    y = df['Closing Price']
-    
-    # Chuẩn hóa dữ liệu cho LSTM
-    y_log = np.log1p(df['Closing Price'])
-    scaler = MinMaxScaler()
-    scaled_data = scaler.fit_transform(y_log.values.reshape(-1, 1))
-    
-    lookback = 7
-    X_lstm = []
-    for i in range(lookback, len(scaled_data)):
-        X_lstm.append(scaled_data[i - lookback:i, 0])
-    X_lstm = np.array(X_lstm)
-    X_lstm = np.reshape(X_lstm, (X_lstm.shape[0], X_lstm.shape[1], 1))
-    
-    # Dự báo với các model
-    pred_lstm = np.expm1(scaler.inverse_transform(model_lstm.predict(X_lstm[-1].reshape(1, lookback, 1)))).flatten()[0]
-    pred_xgb = model_xgb.predict(X_xgb.iloc[-1:].values.reshape(1, -1))[0]
-    
-    # Dự báo tổng hợp
-    meta_input = np.array([[pred_lstm, pred_xgb]])
-    final_pred = meta_model.predict(meta_input).flatten()[0]
-    
-    # Tạo dữ liệu dự báo cho nhiều ngày
-    last_date = df['Date'].iloc[-1]
-    forecast_dates = [last_date + timedelta(days=i) for i in range(1, days_to_predict+1)]
-    forecast_prices = [final_pred * (1 + 0.002*i) for i in range(days_to_predict)]  # Giả định tăng nhẹ
-    
-    return df, forecast_dates, forecast_prices
+    with col2:
+        st.subheader("Biểu đồ dự báo")
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.plot(df['Date'].iloc[-len(y_test):], y_test, label='Giá thực tế', linewidth=2)
+        ax.plot(df['Date'].iloc[-len(y_test):], y_pred, label='Giá dự báo', linestyle='--', linewidth=2)
+        ax.set_xlabel("Ngày")
+        ax.set_ylabel("Giá đóng cửa")
+        ax.set_title(f"Dự báo giá {selected_stock} - {selected_model}")
+        ax.legend()
+        ax.grid(True)
+        plt.xticks(rotation=45)
+        st.pyplot(fig)
+        
+        # Nút tải biểu đồ
+        st.download_button(
+            label="Tải biểu đồ",
+            data=fig_to_bytes(fig),
+            file_name=f"du_bao_{selected_stock}_{datetime.now().strftime('%Y%m%d')}.png",
+            mime="image/png"
+        )
 
-# Giao diện Streamlit
-st.sidebar.header("Tùy chọn dự báo")
-stock_option = st.sidebar.selectbox("Chọn mã cổ phiếu", ['FPT', 'CMG'])
-days_to_predict = st.sidebar.slider("Số ngày dự báo", 1, 30, 7)
+# Hàm chuyển figure thành bytes để tải xuống
+def fig_to_bytes(fig):
+    import io
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+    buf.seek(0)
+    return buf
 
-if st.sidebar.button("Dự báo giá"):
-    with st.spinner(f'Đang dự báo giá {stock_option}...'):
-        try:
-            historical_data, forecast_dates, forecast_prices = predict_stock_price(stock_option, days_to_predict)
-            
-            # Hiển thị kết quả
-            st.subheader(f"Kết quả dự báo cho {stock_option}")
-            
-            # Tạo DataFrame cho dữ liệu dự báo
-            forecast_df = pd.DataFrame({
-                'Ngày': forecast_dates,
-                'Giá dự báo (VND)': [round(price, 2) for price in forecast_prices]
-            })
-            
-            # Hiển thị bảng dự báo
-            st.dataframe(forecast_df.style.format({
-                'Giá dự báo (VND)': '{:,.2f}'
-            }), use_container_width=True)
-            
-            # Vẽ biểu đồ
-            fig, ax = plt.subplots(figsize=(12, 6))
-            
-            # Dữ liệu lịch sử
-            ax.plot(historical_data['Date'][-30:], historical_data['Closing Price'][-30:], 
-                    label='Giá lịch sử', color='blue', marker='o')
-            
-            # Dữ liệu dự báo
-            ax.plot(forecast_dates, forecast_prices, 
-                    label='Giá dự báo', color='red', linestyle='--', marker='x')
-            
-            ax.set_title(f'Diễn biến giá và dự báo {stock_option}')
-            ax.set_xlabel('Ngày')
-            ax.set_ylabel('Giá (VND)')
-            ax.legend()
-            ax.grid(True)
-            
-            st.pyplot(fig)
-            
-            # Hiển thị thông tin thống kê
-            st.subheader("Thống kê giá gần đây")
-            col1, col2, col3 = st.columns(3)
-            
-            last_price = historical_data['Closing Price'].iloc[-1]
-            min_30d = historical_data['Closing Price'][-30:].min()
-            max_30d = historical_data['Closing Price'][-30:].max()
-            
-            col1.metric("Giá đóng cửa gần nhất", f"{last_price:,.2f} VND")
-            col2.metric("Giá thấp nhất 30 ngày", f"{min_30d:,.2f} VND")
-            col3.metric("Giá cao nhất 30 ngày", f"{max_30d:,.2f} VND")
-            
-        except Exception as e:
-            st.error(f"Có lỗi xảy ra: {str(e)}")
+# Hàm dự báo tương lai
+def forecast_future(model, last_data, scaler, days):
+    predictions = []
+    current_input = last_data.copy()
+    
+    for _ in range(days):
+        # Dự báo bước tiếp theo
+        pred = model.predict(current_input.reshape(1, -1, 1))[0, 0]
+        predictions.append(pred)
+        
+        # Cập nhật input cho bước tiếp theo
+        current_input = np.roll(current_input, -1)
+        current_input[-1] = pred
+    
+    # Chuyển đổi lại về giá trị gốc
+    predictions = np.array(predictions).reshape(-1, 1)
+    predictions = scaler.inverse_transform(predictions)
+    predictions = np.expm1(predictions).flatten()
+    
+    return predictions
 
-# Hiển thị thông tin về mô hình
-st.sidebar.markdown("---")
-st.sidebar.subheader("Thông tin mô hình")
-st.sidebar.markdown("""
-- **Mô hình kết hợp**: LSTM + XGBoost
-- **Dữ liệu sử dụng**:
-  - Giá lịch sử
-  - Khối lượng giao dịch
-  - Sự kiện cổ tức
-  - Sự kiện đại hội cổ đông
-  - Chỉ số tài chính
-""")
+# Main app
+def main():
+    # Hiển thị thông tin
+    st.info(f"Đang tải dữ liệu và huấn luyện mô hình cho cổ phiếu {selected_stock}...")
+    
+    # Tải dữ liệu
+    df = load_data(selected_stock)
+    
+    # Huấn luyện mô hình (có thể cache lại để tăng tốc độ)
+    with st.spinner(f"Đang huấn luyện mô hình cho {selected_stock}..."):
+        model, scaler, metrics, y_test, y_pred = train_stock_prediction_model(selected_stock)
+    
+    # Hiển thị kết quả
+    st.success("Hoàn thành huấn luyện mô hình!")
+    display_results(df, y_test, y_pred, metrics)
+    
+    # Dự báo tương lai
+    st.subheader(f"Dự báo giá {selected_stock} trong {forecast_days} ngày tới")
+    
+    # Lấy dữ liệu cuối cùng để dự báo
+    last_data = df['Closing Price'].values[-lookback:]
+    last_dates = df['Date'].values[-lookback:]
+    
+    # Chuẩn hóa dữ liệu
+    last_data_log = np.log1p(last_data)
+    last_data_scaled = scaler.transform(last_data_log.reshape(-1, 1)).flatten()
+    
+    # Dự báo
+    future_predictions = forecast_future(model, last_data_scaled, scaler, forecast_days)
+    
+    # Tạo dates cho tương lai
+    last_date = pd.to_datetime(last_dates[-1])
+    future_dates = [last_date + timedelta(days=i) for i in range(1, forecast_days+1)]
+    
+    # Hiển thị kết quả dự báo
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.write("**Chi tiết dự báo:**")
+        forecast_df = pd.DataFrame({
+            'Ngày': future_dates,
+            'Giá dự báo': future_predictions
+        })
+        st.dataframe(forecast_df.style.format({
+            'Giá dự báo': '{:.2f}',
+            'Ngày': lambda x: x.strftime('%d/%m/%Y')
+        }), hide_index=True)
+        
+        # Nút tải dữ liệu dự báo
+        csv = forecast_df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="Tải dữ liệu dự báo (CSV)",
+            data=csv,
+            file_name=f"du_bao_{selected_stock}_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv"
+        )
+    
+    with col2:
+        st.write("**Biểu đồ dự báo tương lai:**")
+        fig, ax = plt.subplots(figsize=(10, 4))
+        
+        # Vẽ dữ liệu lịch sử
+        ax.plot(df['Date'].iloc[-30:], df['Closing Price'].iloc[-30:], 
+                label='Giá lịch sử', color='blue')
+        
+        # Vẽ dự báo
+        ax.plot(future_dates, future_predictions, 
+                label='Dự báo tương lai', color='red', linestyle='--', marker='o')
+        
+        ax.set_title(f"Dự báo giá {selected_stock} {forecast_days} ngày tới")
+        ax.set_xlabel("Ngày")
+        ax.set_ylabel("Giá đóng cửa")
+        ax.legend()
+        ax.grid(True)
+        plt.xticks(rotation=45)
+        st.pyplot(fig)
 
-# Hướng dẫn sử dụng
-st.expander("Hướng dẫn sử dụng").markdown("""
-1. Chọn mã cổ phiếu cần dự báo (FPT hoặc CMG)
-2. Chọn số ngày muốn dự báo (từ 1 đến 30 ngày)
-3. Nhấn nút "Dự báo giá" để xem kết quả
-4. Kết quả bao gồm:
-   - Bảng giá dự báo chi tiết
-   - Biểu đồ so sánh giá lịch sử và giá dự báo
-   - Các thống kê giá gần đây
-""")
+if __name__ == "__main__":
+    main()
