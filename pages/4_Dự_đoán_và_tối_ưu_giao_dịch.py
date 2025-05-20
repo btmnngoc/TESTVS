@@ -102,7 +102,7 @@ def load_stock_data(stock_id):
 def load_models(stock_id):
     try:
         # Load scaler if available, else create new one
-        scaler_path = f"models/scaler_{stock_id}.joblib"
+        scaler_path = f"models/scaler_FPT.joblib" if stock_id == 'FPT' else f"models/scaler_CMG.joblib"
         scaler = joblib.load(scaler_path) if os.path.exists(scaler_path) else MinMaxScaler()
         if not os.path.exists(scaler_path):
             st.warning(f"Scaler cho {stock_id} không được tìm thấy. Sử dụng scaler mới, có thể ảnh hưởng đến độ chính xác.")
