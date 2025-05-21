@@ -6,6 +6,124 @@ from plotly.subplots import make_subplots
 import re
 from utils.data_loader import load_data, clean_data
 from utils.visualization import create_growth_chart, create_bar_chart
+st.markdown("""
+    <style>
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        
+        @keyframes gradient {
+            0% { background-position: 0% center; }
+            50% { background-position: 100% center; }
+            100% { background-position: 0% center; }
+        }
+        
+        .gradient-text {
+            background: linear-gradient(90deg, #8A2BE2 0%, #00BFFF 50%, #7CFC00 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-size: 200% auto;
+            animation: gradient 3s ease infinite;
+        }
+        
+        .gradient-bar {
+            background: linear-gradient(90deg, #8A2BE2, #00BFFF, #7CFC00);
+            background-size: 200% auto;
+            animation: gradient 3s ease infinite;
+            height: 4px;
+            width: 192px;
+            margin: 0 auto;
+            border-radius: 9999px;
+        }
+        
+        .feature-card {
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid rgba(138, 43, 226, 0.3);
+            backdrop-filter: blur(10px);
+            border-radius: 1rem;
+            padding: 2rem;
+            transition: all 0.3s ease;
+            margin: 0.5rem; /* Thêm margin để cách nhau */
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-5px) scale(1.02);
+            border-color: #00BFFF;
+            box-shadow: 0 10px 30px rgba(0, 191, 255, 0.3);
+        }
+        
+        .welcome-card {
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid rgba(0, 191, 255, 0.3);
+            backdrop-filter: blur(10px);
+            border-radius: 1rem;
+            padding: 2rem 3rem;
+            max-width: 64rem;
+            margin: 0 auto 3rem auto;
+        }
+        
+        body {
+            background-color: #020617;
+            color: #F8FAFC;
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .header-bg {
+            background: linear-gradient(135deg, #020617 0%, #0F172A 100%);
+            box-shadow: 0 4px 30px rgba(0, 191, 255, 0.1);
+            padding: 4rem;
+            border-radius: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .main-title {
+            font-family: 'Space Grotesk', sans-serif;
+            text-shadow: 0 0 10px rgba(138, 43, 226, 0.3);
+        }
+        
+        .floating {
+            animation: float 3s ease-in-out infinite;
+        }
+        
+        .glow {
+            filter: drop-shadow(0 0 8px currentColor);
+        }
+        
+        .gradient-button {
+            background: linear-gradient(90deg, #8A2BE2 0%, #00BFFF 50%, #7CFC00 100%);
+            background-size: 200% auto;
+            transition: all 0.3s ease;
+            border-radius: 9999px;
+            padding: 0.75rem 2rem;
+            color: white;
+            font-weight: 600;
+            display: inline-block;
+        }
+        
+        .gradient-button:hover {
+            transform: translateY(-2px) scale(1.05);
+            box-shadow: 0 10px 20px rgba(0, 191, 255, 0.4);
+            background-position: right center;
+        }
+        
+        .footer-bg {
+            background: linear-gradient(180deg, rgba(2, 6, 23, 0) 0%, #020617 100%);
+            padding: 3rem 0;
+            margin-top: 6rem;
+        }
+        
+        .card-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 2rem; /* Tăng khoảng cách giữa các thẻ */
+            padding: 1rem;
+        }
+        
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@700&display=swap');
+    </style>
+""", unsafe_allow_html=True)
 
 # Tiêu đề trang
 st.markdown("""
