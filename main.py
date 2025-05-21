@@ -29,29 +29,6 @@ def render_header():
     </div>
     """, unsafe_allow_html=True)
 
-# ============ SIDEBAR ============
-def render_sidebar():
-    with st.sidebar:
-        st.markdown("""
-        <div class="sidebar-header">
-            <img src="https://i.imgur.com/xyz1234.png" class="logo">  <!-- Thay bằng logo DABAVERSE -->
-            <h3>DABAVERSE MENU</h3>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        menu_option = st.radio(
-            "",
-            ["🏠 Trang chủ", "📈 Dự báo cổ phiếu", "📊 Phân tích kỹ thuật", "💼 Phân tích tài chính"],
-            index=0
-        )
-        
-        st.markdown("""
-        <div class="sidebar-footer">
-            <p class="version">Phiên bản 2.0.1</p>
-            <p class="copyright">© 2023 DABAVERSE</p>
-        </div>
-        """, unsafe_allow_html=True)
-
 # ============ MAIN CONTENT ============
 def render_main_content():
     st.markdown("""
