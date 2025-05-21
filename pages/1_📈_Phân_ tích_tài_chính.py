@@ -8,14 +8,22 @@ from utils.data_loader import load_data, clean_data
 from utils.visualization import create_growth_chart, create_bar_chart
 
 # Tiêu đề trang
-st.markdown(
-    """
-    <div style='text-align: center; border-bottom: 1px solid #ccc; padding-bottom: 10px;'>
-        <div style='font-size: 2.8rem; font-weight: 900; color: #FD6200;'>DABFIN</div> 
-        <div style='font-size: 2.5rem; font-weight: 900; color: #0E6994;'>PHÂN TÍCH TÀI CHÍNH DOANH NGHIỆP</div>
-    </div>
-    """,
-    unsafe_allow_html=True)
+st.markdown("""
+    <header class="header-bg">
+        <div class="text-center">
+            <div class="flex justify-center mb-6">
+                <div class="relative">
+                    <i class="fas fa-chart-line text-6xl gradient-text glow floating"></i>
+                    <i class="fas fa-star text-xl text-yellow-400 absolute -top-2 -right-2"></i>
+                </div>
+            </div>
+            <h1 class="main-title text-5xl font-bold mb-4 gradient-text">DABAVERSE AI TRADING</h1>
+            <p class="text-xl text-slate-300 mb-6">Nền tảng phân tích và dự báo thị trường chứng khoán thế hệ mới</p>
+            <div class="gradient-bar"></div>
+        </div>
+    </header>
+""", unsafe_allow_html=True)
+
 # Tải dữ liệu
 df = load_data("6.2 (his) financialreport_metrics_FPT_CMG_processed.csv")
 df_long = clean_data(df)
