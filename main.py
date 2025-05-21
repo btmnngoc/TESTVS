@@ -253,28 +253,5 @@ with col6:
         </div>
     """, unsafe_allow_html=True)
 
-# Market Data Visualization
-st.markdown("""
-    <div class="mt-16 p-8 rounded-2xl bg-gradient-to-br from-slate-900/50 to-blue-900/30 border border-blue-900/30">
-        <h2 class="text-3xl font-bold mb-6 gradient-text text-center">Thống kê thị trường</h2>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div class="bg-slate-900/50 p-4 rounded-lg border border-blue-900/30 text-center">
-                <div class="text-2xl text-blue-400 mb-2"><i class="fas fa-arrow-up"></i> 1,256</div>
-                <div class="text-sm text-slate-400">Cổ phiếu tăng</div>
-            </div>
-            <div class="bg-slate-900/50 p-4 rounded-lg border border-red-900/30 text-center">
-                <div class="text-2xl text-red-400 mb-2"><i class="fas fa-arrow-down"></i> 874</div>
-                <div class="text-sm text-slate-400">Cổ phiếu giảm</div>
-            </div>
-            <div class="bg-slate-900/50 p-4 rounded-lg border border-green-900/30 text-center">
-                <div class="text-2xl text-green-400 mb-2"><i class="fas fa-chart-line"></i> 1.8%</div>
-                <div class="text-sm text-slate-400">Tăng trưởng TB</div>
-            </div>
-            <div class="bg-slate-900/50 p-4 rounded-lg border border-purple-900/30 text-center">
-                <div class="text-2xl text-purple-400 mb-2"><i class="fas fa-bolt"></i> 92%</div>
-                <div class="text-sm text-slate-400">Độ chính xác AI</div>
-            </div>
-        </div>
-    </div>
-""", unsafe_allow_html=True)
+
 
