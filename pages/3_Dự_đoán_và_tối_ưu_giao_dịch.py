@@ -308,7 +308,17 @@ with tab1:
         fig.add_trace(go.Scatter(x=df['Date'], y=df['Closing Price'], name='Giá đóng cửa', line=dict(color='blue')))
         fig.add_trace(go.Scatter(x=df['Date'], y=df['MA5'], name='MA5', line=dict(color='orange', width=1)))
         fig.add_trace(go.Scatter(x=df['Date'], y=df['MA10'], name='MA10', line=dict(color='green', width=1)))
-        fig.update_layout(height=400, xaxis_title='Ngày', yaxis_title='Giá (VNĐ)', xaxis_rangeslider_visible=True)
+        fig.update_layout(
+            height=600,  # Tăng chiều cao lên 600px
+            width=800,   # Đặt chiều rộng cố định để biểu đồ rõ hơn
+            xaxis_title='Ngày',
+            yaxis_title='Giá (VNĐ)',
+            xaxis_rangeslider_visible=True,
+            template='plotly_dark',  # Sử dụng giao diện tối
+            grid=dict(xside='top', yside='left', color='#404040', opacity=0.3),  # Thêm lưới mờ
+            title=f'Biểu đồ giá cổ phiếu {stock_choice}',
+            title_font_size=24,  # Tăng kích thước tiêu đề
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
