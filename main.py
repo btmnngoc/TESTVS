@@ -151,7 +151,6 @@ st.markdown("""
                 <div class="relative">
                     <div class="absolute -inset-1 bg-gradient-to-r from-purple-600 to-blue-500 rounded-lg blur opacity-75"></div>
                     <div class="relative px-6 py-2 bg-slate-900 rounded-lg">
-                        <span class="text-slate-300">Độ chính xác dự báo: <span class="font-bold text-green-400">87.3%</span></span>
                     </div>
                 </div>
             </div>
