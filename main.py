@@ -130,7 +130,7 @@ st.markdown("""
                     <i class="fas fa-star text-xl text-yellow-400 absolute -top-2 -right-2"></i>
                 </div>
             </div>
-            <h1 class="main-title text-5xl font-bold mb-4 gradient-text">DABAVERSE AI TRADING</h1>
+            <h1 class="main-title text-5xl font-bold mb-4 gradient-text">DABAFIN AI TRADING</h1>
             <p class="text-xl text-slate-300 mb-6">Nền tảng phân tích và dự báo thị trường chứng khoán thế hệ mới</p>
             <div class="gradient-bar"></div>
         </div>
@@ -142,7 +142,7 @@ st.markdown("""
     <main class="container mx-auto px-4 pb-12">
         <!-- Welcome Card -->
         <div class="welcome-card">
-            <h2 class="text-3xl font-semibold text-center mb-6 gradient-text">Chào mừng đến với DABAVERSE</h2>
+            <h2 class="text-3xl font-semibold text-center mb-6 gradient-text">Chào mừng đến với DABAFIN</h2>
             <p class="text-lg text-slate-300 text-center leading-relaxed">
                 Giải pháp phân tích chứng khoán toàn diện kết hợp trí tuệ nhân tạo và công nghệ phân tích dữ liệu tiên tiến,
                 mang đến cái nhìn sâu sắc và dự báo chính xác về thị trường
