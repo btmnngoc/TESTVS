@@ -17,7 +17,7 @@ st.markdown("""
                     <i class="fas fa-star text-xl text-yellow-400 absolute -top-2 -right-2"></i>
                 </div>
             </div>
-            <h1 class="main-title text-5xl font-bold mb-4 gradient-text">DABAVERSE AI TRADING</h1>
+            <h1 class="main-title text-5xl font-bold mb-4 gradient-text">DABAFIN AI TRADING</h1>
             <p class="text-xl text-slate-300 mb-6">Nền tảng phân tích và dự báo thị trường chứng khoán thế hệ mới</p>
             <div class="gradient-bar"></div>
         </div>
